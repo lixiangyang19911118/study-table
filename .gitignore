@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# 环境变量：只提交模板，真实值一律不进 git
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# IDE 个人工作区：各人路径不同，提交后每次都被改脏
+.idea/
+*.iml
+
+# 日志
+*.log

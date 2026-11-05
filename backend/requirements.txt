@@ -1,0 +1,13 @@
+# M0 依赖清单 —— 对应技术方案 v1.1 第 3.2 节
+# 无 Redis、无 Celery、无 OSS SDK：单机自用不需要
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+SQLAlchemy>=2.0.36,<3.0
+PyMySQL[rsa]>=1.1.1,<2.0
+alembic>=1.14,<2.0
+pydantic-settings>=2.6,<3.0
+APScheduler>=3.10,<4.0
+PyJWT>=2.9,<3.0
+python-multipart>=0.0.12
+Pillow>=11.0
+httpx>=0.27
