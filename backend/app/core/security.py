@@ -39,12 +39,20 @@ def verify_secret(raw: str, stored: str | None) -> bool:
         return False
 
 
-def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
+def create_access_token(
+    subject: str, extra: dict[str, Any] | None = None, minutes: int | None = None
+) -> str:
+    """签发 JWT。
+
+    minutes 显式传入时覆盖 ACCESS_TOKEN_MIN。会话 Cookie 走 7 天，
+    这样家长不必每天重新登录；真正的 access/refresh 双令牌拆分留到
+    对外提供服务时再做，单机自用没必要。
+    """
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": subject,
         "iat": now,
-        "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_MIN),
+        "exp": now + timedelta(minutes=minutes or settings.ACCESS_TOKEN_MIN),
         "typ": "access",
     }
     if extra:

@@ -32,28 +32,30 @@ def test_meta():
     assert r.json()["max_upload_mb"] > 0
 
 
-def test_reject_unknown_biz_type():
+def test_upload_rejects_anonymous():
+    """M1 起上传要求登录。
+
+    参数校验与鉴权谁先返回都可以接受，但**不能是 2xx**——匿名请求
+    绝不能写入 file_object 或在磁盘上留下文件。带登录态的校验见
+    tests/test_auth.py::test_upload_validates_biz_type_when_logged_in。
+    """
     with TestClient(app) as c:
         r = c.post("/api/v1/files", data={"biz_type": "cat"}, files={"file": ("a.pdf", b"x")})
-    assert r.status_code == 400
+    assert r.status_code in (400, 401)
 
 
-def test_reject_non_pdf_book():
+def test_read_file_rejects_anonymous():
     with TestClient(app) as c:
-        r = c.post(
-            "/api/v1/files",
-            data={"biz_type": "book"},
-            files={"file": ("a.png", b"\x89PNG", "image/png")},
-        )
-    assert r.status_code == 400
+        r = c.get("/api/v1/files/1")
+    assert r.status_code == 401
 
 
 def test_missing_file_never_200():
-    """库没建时这里会 500，库建好后应为 404；两种都算「没返回文件」。
+    """匿名请求应停在 401；登录后不存在的 id 才是 404。
 
     注意要关掉 raise_server_exceptions，否则未捕获异常会直接抛到测试里，
     那样测的就不是「接口怎么响应」而是「代码有没有 try」。
     """
     with TestClient(app, raise_server_exceptions=False) as c:
         r = c.get("/api/v1/files/999999")
-    assert r.status_code in (404, 500, 503)
+    assert r.status_code in (401, 404, 500, 503)

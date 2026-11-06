@@ -31,6 +31,9 @@ class Account(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(
         BigInteger, primary_key=True, autoincrement=True, comment="主键"
     )
+    username: Mapped[str] = mapped_column(
+        String(32), unique=True, comment="登录名，唯一；自用场景就是一个固定字符串"
+    )
     phone: Mapped[Optional[str]] = mapped_column(
         String(20), unique=True, comment="登录手机号，可空（本机自用可先不填）"
     )

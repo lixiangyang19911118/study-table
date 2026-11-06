@@ -1,23 +1,42 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+
+import { useSession } from './stores/session'
+
+const session = useSession()
+const route = useRoute()
+const router = useRouter()
+
+// 登录页不要顶栏：那里只有一张卡片，多一条导航反而分心
+const bare = computed(() => route.name === 'login')
+
+async function signOut() {
+  await session.signOut()
+  router.replace('/login')
+}
 </script>
 
 <template>
   <div class="shell">
-    <header class="bar">
+    <header v-if="!bare" class="bar">
       <div class="brand">
         <span class="dot"></span>
         <strong>学习工作台</strong>
-        <span class="ver">M0 骨架</span>
+        <span class="ver">M1</span>
       </div>
       <nav class="nav">
-        <RouterLink to="/">首页</RouterLink>
+        <RouterLink to="/">自检</RouterLink>
         <RouterLink to="/kid/today">孩子端</RouterLink>
         <RouterLink to="/parent/dashboard">家长端</RouterLink>
       </nav>
+      <div v-if="session.account" class="who">
+        <span class="name">{{ session.account.nickname }}</span>
+        <button class="out" @click="signOut">退出</button>
+      </div>
     </header>
 
-    <main class="main">
+    <main class="main" :class="{ wide: bare }">
       <RouterView />
     </main>
   </div>
@@ -53,5 +72,22 @@ import { RouterLink, RouterView } from 'vue-router'
 .nav a:hover { background: var(--page); }
 .nav a.router-link-active { color: var(--kid); background: var(--kid-soft); }
 
+.who { display: flex; align-items: center; gap: 10px; }
+.who .name { font-size: 12.5px; color: var(--muted); }
+.out {
+  font: inherit; font-size: 12px; cursor: pointer;
+  background: transparent; color: var(--hint);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 4px 10px;
+}
+.out:hover { color: var(--bad); border-color: #f3c9c9; }
+
 .main { flex: 1; padding: 32px 28px 64px; max-width: 960px; width: 100%; margin: 0 auto; }
+.main.wide { max-width: none; padding: 0 28px; }
+
+@media (max-width: 720px) {
+  .bar { gap: 12px; padding: 12px 16px; flex-wrap: wrap; }
+  .nav { overflow-x: auto; }
+  .main { padding: 22px 16px 48px; }
+}
 </style>

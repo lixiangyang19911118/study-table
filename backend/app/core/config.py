@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_MIN: int = 30
     REFRESH_TOKEN_DAYS: int = 7
 
+    # 会话 Cookie：JWT 不放在响应体里，只放 HttpOnly Cookie。
+    # 原因见技术方案 v1.1 缺口 1 —— <img> 与 PDF iframe 带不上 Authorization 头。
+    SESSION_COOKIE: str = "st_session"
+    SESSION_DAYS: int = 7
+    # 本机是 http，必须 False；上云开 HTTPS 后改成 True
+    COOKIE_SECURE: bool = False
+
     MYSQL_HOST: str = "127.0.0.1"
     MYSQL_PORT: int = 3306
     MYSQL_USER: str = "study"
