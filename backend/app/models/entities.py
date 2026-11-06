@@ -174,6 +174,10 @@ class Task(Base, TimestampMixin):
     note: Mapped[Optional[str]] = mapped_column(
         Text, comment="备注：家长留言或孩子写的说明"
     )
+    submit_note: Mapped[Optional[str]] = mapped_column(
+        Text,
+        comment="孩子提交时写的一句说明；与照片二选一即可满足提交条件，退回时清空",
+    )
     started_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime, comment="首次开始计时的时间（UTC）"
     )

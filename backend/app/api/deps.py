@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import decode_token
-from app.models import Account, Child
+from app.models import Account, Child, Task
 
 
 def get_current_account(request: Request, db: Session = Depends(get_db)) -> Account:
@@ -71,3 +71,15 @@ def default_child(account: Account, db: Session) -> Child:
     if not children:
         raise HTTPException(404, "账号下还没有孩子档案，请先在家长端创建")
     return children[0]
+
+
+def owned_task(task_id: int, account: Account, db: Session) -> Task:
+    """取任务并校验归属。软删的视同不存在——列表里看不到，直连 id 也不该读得到。
+
+    越权仍是 403、不存在仍是 404，和 owned_child 保持一致。
+    """
+    task = db.get(Task, task_id)
+    if task is None or task.deleted_at is not None:
+        raise HTTPException(404, "任务不存在")
+    owned_child(task.child_id, account, db)
+    return task

@@ -46,18 +46,21 @@ python3 -m venv .venv
 
 如果某次改动被迫同时打开四个目录，说明分层被穿透了。
 
-### 四层 + 两条旁路
+### 五层 + 两条旁路
 
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  接入层   app/main.py   app/api/v1/                       │
 │           HTTP、参数校验、状态码、鉴权                     │
 ├──────────────────────────────────────────────────────────┤
-│  契约层   app/models/          app/schemas/（待建）        │
-│           ORM 表映射            请求/响应模型               │
+│  契约层   app/models/          app/schemas/               │
+│           ORM 表映射            请求/响应模型              │
+├──────────────────────────────────────────────────────────┤
+│  业务层   app/services/                                   │
+│           状态机、事务边界、跨表编排                       │
 ├──────────────────────────────────────────────────────────┤
 │  基础层   app/core/                                       │
-│           配置、连接池、口令散列、JWT                       │
+│           配置、连接池、口令散列、JWT、本地日期            │
 ├──────────────────────────────────────────────────────────┤
 │  适配层   app/integrations/                               │
 │           磁盘存储；将来的 LLM / OCR                       │
@@ -70,15 +73,18 @@ python3 -m venv .venv
 ### 依赖方向
 
 ```
-        main.py
-       ╱   │   ╲
-    api    │    tasks
-     │ ╲   │   ╱  │
-     │  ╲  │  ╱   │
-     ▼   ▼ ▼ ▼    ▼
-  models      integrations
-     │            │
-     └────► core ◄┘
+             main.py
+           ╱    │    ╲
+        api     │    tasks
+         │ ╲    │    ╱
+         │  ╲   ▼   ╱
+         │   services
+         │      │
+         ▼      ▼
+ integrations   models
+         ╲      ╱
+          ▼    ▼
+           core
 ```
 
 四条规则，没有例外：
@@ -86,7 +92,9 @@ python3 -m venv .venv
 1. **`core/` 是最底层**，只 import 第三方库，不 import 项目内任何模块
 2. **`models/` 不 import `api/` 和 `tasks/`**，表结构不应该知道谁在调用它
 3. **`integrations/` 不 import `app.models`** —— 它一旦认识数据库模型，就再也换不掉了
-4. **`api/` 和 `tasks/` 平级，互不 import**，两者都要用的逻辑往下沉到 `services/`（尚未建立，见文末）
+4. **`api/` 和 `tasks/` 平级，互不 import**，两者都要用的逻辑往下沉到 `services/`
+
+第五条是 M2 补的，也是实际最容易被违反的一条：**`api/` 不许直接改 `status` 这类状态字段**，一律调 `services`。详见下面 `app/services/` 一节。
 
 ### 一次请求怎么走
 
@@ -138,6 +146,7 @@ CORS 只放行 `5173` 两个来源，`allow_credentials=True` 是为 Cookie 鉴�
 | `config.py` | 读 `.env`，唯一的配置来源 | `database_url`、`upload_dir` 是从字段拼出来的 property，别处不要再拼一遍；密码过 `quote_plus`，否则含 `@`、`#` 时连接串解析错位 |
 | `db.py` | engine + SessionLocal + `get_db` 依赖 | 同步 Session，刻意不用 async ORM；`pool_recycle=3600` 要小于 MySQL 的 `wait_timeout`，否则空闲久了报 `MySQL server has gone away` |
 | `security.py` | scrypt 口令散列 + JWT 签发校验 | 用标准库 `hashlib.scrypt`，不引 passlib —— 它和新版 bcrypt 长期不兼容 |
+| `clock.py` | 本地时区的「现在 / 今天」 | 库里存 UTC，但 `task_date` 记的是「哪一天」。晚上 8 点之后布置的任务若用 `date.today()` 会落到第二天 |
 
 **不放**：业务规则。`core` 被所有层依赖，它一旦 import 上层就会立刻循环依赖。
 
@@ -172,15 +181,22 @@ CORS 只放行 `5173` 两个来源，`allow_credentials=True` 是为 Cookie 鉴�
 
 不要直接 `ALTER TABLE`。直连数据库改完，下次重建库时那个字段就没了。
 
-字段注释也写在模型里（`comment=` 参数），当前覆盖率 **15 张表 / 138 个字段，100%**。新加字段漏了 `comment=` 就会破，补回来要多写一版迁移。
+字段注释也写在模型里（`comment=` 参数），当前覆盖率 **15 张表 / 139 个字段，100%**。新加字段漏了 `comment=` 就会破，补回来要多写一版迁移。
 
 ### `app/schemas/`
 
-Pydantic 请求/响应模型。**目前是空的**，M1 起用。
+Pydantic 请求/响应模型。
 
-M0 的两个接口参数简单，函数签名够用。一旦开始返回业务对象（孩子档案、任务列表），就必须有明确的响应模型，否则会不小心把 `password_hash`、`deleted_at` 这类字段一起吐给前端。
+| 文件 | 内容 |
+|---|---|
+| `auth.py` | 登录、账号、孩子档案的入参与出参 |
+| `task.py` | 任务的布置/修改/提交/退回，以及 `TaskBrief` / `TaskDetail` 两种出参 |
 
 约定：**ORM 对象不直接返回**，一律经 schema 转换。这不是洁癖，是防止字段泄漏的唯一手段。
+
+列表用 `TaskBrief`（不带照片和审核流水，只带 `shot_count`），详情用 `TaskDetail`。列表页每条都塞全量照片，二十条任务就是二十次多余查询。
+
+时间字段带一个 `field_serializer` 输出 `+00:00`。库里是 UTC naive，直接吐出去会被 JS 的 `new Date()` 当本地时间，晚上八点之后能差出一天。
 
 ### `app/api/v1/`
 
@@ -188,19 +204,83 @@ HTTP 接入层。
 
 | 文件 | 职责 |
 |---|---|
-| `router.py` | 三行汇总，只做 `include_router` |
+| `router.py` | 七行汇总，只做 `include_router` |
 | `health.py` | `/health` 与 `/meta`。设计原则是"库连不上也要能报出原因"，所以它吞异常并如实返回，绝不抛 500 |
+| `auth.py` | 登录、登出、`/me`。JWT 只写 HttpOnly Cookie，响应体里没有 token |
+| `children.py` | 孩子档案增删改查 |
 | `files.py` | 上传与读取 |
+| `tasks.py` | 13 个任务接口，覆盖布置到发星全链路 |
+| `deps.py` | `get_current_account` / `owned_child` / `owned_task`，身份只从这里来 |
 
 **放**：参数校验、状态码、权限判断、调用下层。
 
-**不放**：复杂 SQL、文件字节处理、跨表业务编排。
+**不放**：复杂 SQL、文件字节处理、跨表业务编排、**任何 `task.status = "xxx"` 的直接赋值**。
 
 `files.py` 里有一处顺序值得记住：**先落盘，再判断真实大小，超限就删掉再报 413**。原因是 `UploadFile.size` 不可靠（分块传输时可能是 `None`），只有写完才知道真实字节数，所以必须有回收动作，否则会留下孤儿文件。
 
 `biz_type` 用白名单（`{"book","shot","avatar"}`）而不是自由字符串，因为它会直接参与磁盘路径拼接。
 
-还没做鉴权，`child_id` 是从表单直接收的。M1 之后必须改成"从当前登录账号推导"，否则任何人传别人的 `child_id` 就能读到别人家的照片。
+M1 起两个文件接口都要登录，`child_id` 改为从当前账号推导。M0 时它是从表单直接收的，任何人传别人的 `child_id` 就能读到别人家的照片。
+
+### `app/services/`
+
+业务编排层。M2 只有一个文件 `task_service.py`，但它是整个后端最该守住的地方。
+
+**所有 `task.status` 变更只能走这里。** 路由层直接赋值一行代码就能绕过计时结算、审核流水和星星流水，而且不会报错——出问题时表现为"这孩子星星少了一颗"，极难定位。
+
+#### 状态机：5 态 6 边
+
+```
+todo --start--> doing --submit--> submitted --approve--> done（终态）
+                   ↑                  │
+                   │                  ├--reject--> rejected --restart--┐
+                   └----withdraw------┘                                │
+                   └──────────────────────────────────────────────────┘
+```
+
+| 边 | 触发 | 前置条件 | 副作用 |
+|---|---|---|---|
+| `start` | 孩子 | todo | `started_at = now` |
+| `submit` | 孩子 | doing，且照片或说明至少一项 | `spent_sec += now - started_at`，记 `submit_note` |
+| `approve` | 家长 | submitted | 写 `task_review`，写 `star_ledger +stars` |
+| `reject` | 家长 | submitted，原因非空 | 写 `task_review`，清空 `submit_note` |
+| `withdraw` | 孩子 | submitted | `started_at` 重置，避免二次提交重复计时 |
+| `restart` | 孩子 | rejected | `started_at` 重置 |
+
+`done` 没有出边。M2 明确不做「撤销审核」——它会让孩子看到星星变少，解释成本高于收益。误审只能改库。
+
+#### 三条不容易想到的实现细节
+
+**1. 用条件更新挡并发，不做先查后改。**
+
+```python
+update(Task).where(Task.id == id, Task.status.in_(("submitted",)), ...)
+if db.execute(stmt).rowcount == 0:
+    raise TaskStateError("任务当前是「已完成」，不能执行这个操作")
+```
+
+家长连点两下审核、手机和电脑同时点，只有一次 `rowcount == 1`，另一次 409。先 `db.get` 再判断 `if status == "submitted"` 的做法在中间留了窗口，结果是发两份星星。
+
+**2. 状态变更和流水写在同一个事务里。** `_transition()` 只 `execute` 不 `commit`，调用方把 `TaskReview`、`StarLedger` 加进去后统一提交。中途失败则一起回滚，不会出现"任务完成了但星星没到账"。
+
+**3. 逾期不是一种状态，是算出来的。**
+
+```
+今日   task_date == 今天 且 status in (todo, doing, rejected)
+补做   task_date < 今天 且 status in (todo, doing, rejected)
+待审核 status == submitted（不限日期）
+已完成 status == done 且 task_date == 今天
+```
+
+好处：不依赖定时任务。电脑关机三天再打开，补做区依然是对的；如果靠 23:59 跑批标记逾期，进程没跑那天就漏了一批。
+
+注意「待审核」不分日期：昨天交了家长没审，球在家长那边，不该算孩子没完成。
+
+#### 为什么退回后要求「有新东西」
+
+`submit` 会查这个任务最后一次 `reject` 的时间，要求那之后有新照片，或有一句新说明。否则孩子原样再点一次提交就能绕过退回，退回就变成了一个纯装饰的按钮。
+
+这也是 `reject` 要清空 `submit_note` 的原因：清空之后，「有说明」就等于「新说明」，判断只需要一行。
 
 ### `app/integrations/`
 
@@ -248,7 +328,7 @@ if p != self.root and self.root not in p.parents:
 
 ### `alembic/`
 
-表结构演进。`versions/0001_init_schema.py` 建 15 张表，`0002_add_comments.py` 补中文注释。
+表结构演进。`0001` 建 15 张表，`0002` 补中文注释，`0003` 给 `account` 加登录名，`0004` 给 `task` 加 `submit_note`。
 
 `env.py` 里三件事值得知道：
 
@@ -267,13 +347,27 @@ if p != self.root and self.root not in p.parents:
 
 ### `tests/`
 
-`test_smoke.py` 六条。原则是**不依赖库里有没有数据**：数据库没建时也要能跑，因为 health 的设计就是连不上也报原因。
+32 条，约 2 秒跑完。
+
+| 文件 | 内容 |
+|---|---|
+| `conftest.py` | `account_factory`：唯一用户名建账号，用例结束删账号（级联删孩子） |
+| `test_smoke.py` | 健康检查、404、不依赖库里的数据 |
+| `test_auth.py` | 登录成功/失败、未登录 401、跨账号 403 |
+| `test_task_flow.py` | 状态机 6 条边 + 6 条不该通过的路径 + 补做区口径 |
 
 ```bash
 .venv/bin/python -m pytest tests -q
 ```
 
+两条测试环境的取舍：
+
+- **不建独立测试库。** `study` 账号只有 `study_table` 的权限，建不了库。改用唯一用户名隔离 + 用例后 CASCADE 清理，比为此去要 root 权限划算。
+- **不用 `with TestClient(app)`。** 那会触发 lifespan，每条用例起停一次 APScheduler，用例一多就慢且偶发报错。
+
 `test_missing_file_never_200` 用了 `TestClient(app, raise_server_exceptions=False)`：不关掉的话未捕获异常会直接抛进测试，测的就变成"代码里有没有 try"，而不是"接口怎么响应"。
+
+照片相关的用例直接建 `file_object` 记录，不走 `/files` 上传：测试不关心落盘，也不想往磁盘扔垃圾。清理时要先删 `task_shot` 再删 `file_object`——`task_shot.file_id` 是 `ON DELETE RESTRICT`，顺序反了会报外键错误。
 
 ---
 

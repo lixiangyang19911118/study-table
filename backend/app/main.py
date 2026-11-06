@@ -7,11 +7,13 @@ uvicorn 只跑单进程（--workers 1），这是 APScheduler 方案成立的前
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.services.task_service import TaskStateError
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -47,6 +49,19 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api/v1")
+
+
+@app.exception_handler(TaskStateError)
+def on_task_state_error(_: Request, exc: TaskStateError) -> JSONResponse:
+    """状态机拒绝的操作统一返回 409（或 400/422），并带上 code。
+
+    路由里不用逐条 try/except——十二条状态边各写一遍捕获，
+    迟早漏一条变成 500。
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": str(exc), "code": exc.code},
+    )
 
 
 @app.get("/", include_in_schema=False)
