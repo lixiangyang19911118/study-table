@@ -14,6 +14,15 @@ const http = axios.create({
 http.interceptors.response.use(
   (res) => res.data,
   (err) => {
+    // Cookie 有过期时间（7 天），过期后所有接口都 401。
+    // 不处理的话页面只会显示「请求失败」，用户不知道要重新登录。
+    // 用整页跳转而不是 router.push：顺便把 store 里的残留状态一起清掉。
+    // 登录页自身除外，否则密码输错会被当成会话过期。
+    if (err.response?.status === 401 && location.pathname !== '/login') {
+      const back = encodeURIComponent(location.pathname + location.search)
+      location.assign(`/login?redirect=${back}`)
+    }
+
     const msg =
       err.response?.data?.detail ||
       err.response?.data?.error?.message ||

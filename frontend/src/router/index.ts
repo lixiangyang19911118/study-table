@@ -23,6 +23,12 @@ const router = createRouter({
       children: [
         { path: '', redirect: '/kid/today' },
         { path: 'today', name: 'kid-today', component: () => import('../views/kid/Today.vue') },
+        // 作业页单独一条路由：拍照、计时、提交都在那，列表页只管导航
+        {
+          path: 'task/:id',
+          name: 'kid-task',
+          component: () => import('../views/kid/Task.vue'),
+        },
       ],
     },
     {
@@ -33,6 +39,16 @@ const router = createRouter({
           path: 'dashboard',
           name: 'parent-dashboard',
           component: () => import('../views/parent/Dashboard.vue'),
+        },
+        {
+          path: 'tasks',
+          name: 'parent-tasks',
+          component: () => import('../views/parent/Tasks.vue'),
+        },
+        {
+          path: 'review',
+          name: 'parent-review',
+          component: () => import('../views/parent/Review.vue'),
         },
       ],
     },

@@ -23,12 +23,14 @@ async function signOut() {
       <div class="brand">
         <span class="dot"></span>
         <strong>学习工作台</strong>
-        <span class="ver">M1</span>
+        <span class="ver">M2</span>
       </div>
       <nav class="nav">
-        <RouterLink to="/">自检</RouterLink>
         <RouterLink to="/kid/today">孩子端</RouterLink>
-        <RouterLink to="/parent/dashboard">家长端</RouterLink>
+        <RouterLink to="/parent/dashboard">家长总览</RouterLink>
+        <RouterLink to="/parent/tasks">布置</RouterLink>
+        <RouterLink to="/parent/review">审核</RouterLink>
+        <RouterLink to="/">自检</RouterLink>
       </nav>
       <div v-if="session.account" class="who">
         <span class="name">{{ session.account.nickname }}</span>
