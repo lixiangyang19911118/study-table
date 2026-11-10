@@ -38,9 +38,14 @@ function rejectCount(t: TaskDetail) {
   return t.reviews.filter((r) => r.action === 'reject').length
 }
 
-async function approve(t: TaskDetail) {
+async function approve(t: TaskDetail, redoCorrect?: boolean) {
+  const tail = redoCorrect === undefined
+    ? '通过后孩子立刻拿到'
+    : redoCorrect
+      ? '判为「做对了」，这道错题会往后排一次复习。通过后孩子立刻拿到'
+      : '判为「还是错」，这道错题明天会再来一次。通过后孩子立刻拿到'
   const ok = window.confirm(
-    `通过「${t.title}」？通过后孩子立刻拿到 ${t.stars} 颗星，这一步不能撤回。`,
+    `通过「${t.title}」？${tail} ${t.stars} 颗星，这一步不能撤回。`,
   )
   if (!ok) return
 
@@ -48,14 +53,21 @@ async function approve(t: TaskDetail) {
   err.value = ''
   msg.value = ''
   try {
-    await approveTask(t.id)
-    msg.value = `已通过，发出去 ${t.stars} 颗星`
+    await approveTask(t.id, redoCorrect)
+    msg.value = redoCorrect === undefined
+      ? `已通过，发出去 ${t.stars} 颗星`
+      : `已通过并发星，错题${redoCorrect ? '往后排一轮' : '明天重来'}`
     await load()
   } catch (e) {
     err.value = e instanceof Error ? e.message : '操作失败'
   } finally {
     busyId.value = null
   }
+}
+
+/** 错题第几次复习：stage 0 是刚录入，4 是掌握。 */
+function stageText(stage: number) {
+  return stage === 0 ? '第 1 次复习' : `第 ${stage + 1} 次复习`
 }
 
 function openReject(t: TaskDetail) {
@@ -124,6 +136,20 @@ onMounted(load)
         </div>
       </header>
 
+      <!-- 错题重做：把原题摆出来，否则家长只看到一张照片，判不出对错 -->
+      <div v-if="t.mistake" class="mistake">
+        <div class="m-head">
+          <span class="m-chip">{{ t.mistake.subject }}</span>
+          <span class="m-point">{{ t.mistake.point || '未填知识点' }}</span>
+          <span class="m-stage">{{ stageText(t.mistake.stage) }}</span>
+        </div>
+        <p class="m-stem">{{ t.mistake.stem || '（这道错题只有照片，看下面的作业照）' }}</p>
+        <div class="m-answers">
+          <span v-if="t.mistake.answer_own" class="m-own">当时写的：{{ t.mistake.answer_own }}</span>
+          <span v-if="t.mistake.answer_right" class="m-right">正确答案：{{ t.mistake.answer_right }}</span>
+        </div>
+      </div>
+
       <div v-if="t.shots.length" class="shots">
         <a v-for="s in t.shots" :key="s.id" :href="s.url" target="_blank" rel="noopener">
           <img :src="s.url" alt="作业照片" />
@@ -151,7 +177,15 @@ onMounted(load)
       </div>
 
       <div v-else class="ops">
-        <button class="primary" :disabled="busyId === t.id" @click="approve(t)">
+        <template v-if="t.mistake">
+          <button class="primary" :disabled="busyId === t.id" @click="approve(t, true)">
+            {{ busyId === t.id ? '处理中…' : `做对了，给 ${t.stars} 颗星` }}
+          </button>
+          <button class="soft-warn" :disabled="busyId === t.id" @click="approve(t, false)">
+            还是错，明天再来
+          </button>
+        </template>
+        <button v-else class="primary" :disabled="busyId === t.id" @click="approve(t)">
           {{ busyId === t.id ? '处理中…' : `通过，给 ${t.stars} 颗星` }}
         </button>
         <button class="ghost" @click="openReject(t)">退回重做</button>
@@ -190,6 +224,29 @@ h1 { font-size: 21px; font-weight: 500; margin-bottom: 6px; }
 }
 .shots img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .no-shot { font-size: 12px; color: var(--hint); margin-bottom: 10px; }
+
+.mistake {
+  background: var(--page); border: 1px solid var(--line);
+  border-radius: var(--r-sm); padding: 12px 14px; margin-bottom: 14px;
+}
+.m-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
+.m-chip {
+  font-size: 10.5px; color: var(--muted);
+  background: var(--card); border-radius: 4px; padding: 1px 6px;
+}
+.m-point { font-size: 12.5px; color: var(--ink-2); }
+.m-stage { font-size: 11px; color: var(--kid); margin-left: auto; }
+.m-stem { font-size: 14px; color: var(--ink); line-height: 1.6; margin-bottom: 7px; }
+.m-answers { display: flex; gap: 14px; flex-wrap: wrap; }
+.m-own { font-size: 12px; color: var(--bad); }
+.m-right { font-size: 12px; color: var(--ok); }
+
+.soft-warn {
+  font-size: 13px; padding: 7px 16px;
+  background: transparent; color: var(--bad);
+  border: 1px solid #f0d4d4; border-radius: var(--r-sm);
+}
+.soft-warn:disabled { color: var(--hint); border-color: var(--line); cursor: default; }
 
 .quote {
   font-size: 13px; color: var(--ink-2);

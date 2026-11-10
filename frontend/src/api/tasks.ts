@@ -27,6 +27,18 @@ export interface ReviewLog {
   created_at: string
 }
 
+/** 错题重做任务关联的错题摘要。审核页要靠它显示原题和正确答案。 */
+export interface MistakeRef {
+  id: number
+  subject: string
+  point: string
+  stem: string
+  answer_own: string | null
+  answer_right: string | null
+  stage: number
+  due_date: string | null
+}
+
 export interface TaskBrief {
   id: number
   subject: string
@@ -49,11 +61,14 @@ export interface TaskBrief {
 export interface TaskDetail extends TaskBrief {
   shots: Shot[]
   reviews: ReviewLog[]
+  mistake: MistakeRef | null
 }
 
 export interface TaskInput {
   subject?: Subject
   title: string
+  /** calc 任务会走口算页而不是拍照页 */
+  kind?: 'normal' | 'calc'
   minutes_est?: number
   stars?: number
   task_date?: string
@@ -105,8 +120,18 @@ export function withdrawTask(id: number) {
   return http.post<unknown, TaskDetail>(`/tasks/${id}/withdraw`)
 }
 
-export function approveTask(id: number) {
-  return http.post<unknown, TaskDetail>(`/tasks/${id}/approve`)
+/**
+ * 审核通过。
+ *
+ * 如果这是「错题重做」任务，`redoCorrect` 决定这道错题下一轮什么时候再来：
+ * true 往后排（+2/+4/+7 天），false 明天重来。
+ * 不传就只完成任务、不动错题节奏——留给「先收星星，回头再判」的场景。
+ */
+export function approveTask(id: number, redoCorrect?: boolean | null) {
+  const body = redoCorrect === undefined || redoCorrect === null
+    ? undefined
+    : { redo_correct: redoCorrect }
+  return http.post<unknown, TaskDetail>(`/tasks/${id}/approve`, body)
 }
 
 export function rejectTask(id: number, comment: string) {

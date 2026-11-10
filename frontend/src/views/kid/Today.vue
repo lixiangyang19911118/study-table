@@ -25,7 +25,13 @@ const gradeText = computed(() => {
 })
 
 const todayStars = computed(() => done.value.reduce((sum, t) => sum + t.stars, 0))
+
 const openCount = computed(() => today.value.length)
+
+/** 口算进「一题一屏」的做题页，其余进拍照提交的作业页。 */
+function taskLink(t: TaskBrief) {
+  return t.kind === 'calc' ? `/kid/calc/${t.id}` : `/kid/task/${t.id}`
+}
 
 const greeting = computed(() => {
   if (!session.child) return '孩子端 · 今日'
@@ -93,6 +99,9 @@ onMounted(load)
     <div>
       <h1>{{ greeting }}</h1>
       <p class="sub">{{ subline }}</p>
+      <RouterLink v-if="session.child" class="practice" to="/kid/calc">
+        想多练几道口算？自己来一轮
+      </RouterLink>
     </div>
     <div v-if="session.child" class="stars">
       <strong>{{ todayStars }}</strong>
@@ -130,7 +139,7 @@ onMounted(load)
           :key="t.id"
           class="row"
           :class="t.status"
-          :to="`/kid/task/${t.id}`"
+          :to="taskLink(t)"
         >
           <span class="bar"></span>
           <div class="body">
@@ -156,7 +165,7 @@ onMounted(load)
           v-for="t in backlog"
           :key="t.id"
           class="row backlog"
-          :to="`/kid/task/${t.id}`"
+          :to="taskLink(t)"
         >
           <span class="bar"></span>
           <div class="body">
@@ -180,7 +189,7 @@ onMounted(load)
           v-for="t in review"
           :key="t.id"
           class="row submitted"
-          :to="`/kid/task/${t.id}`"
+          :to="taskLink(t)"
         >
           <span class="bar"></span>
           <div class="body">
@@ -203,7 +212,7 @@ onMounted(load)
           v-for="t in done"
           :key="t.id"
           class="row done"
-          :to="`/kid/task/${t.id}`"
+          :to="taskLink(t)"
         >
           <span class="tick">✓</span>
           <div class="body">
@@ -227,6 +236,10 @@ onMounted(load)
 }
 .head h1 { font-size: 21px; font-weight: 500; margin-bottom: 5px; }
 .sub { font-size: 13px; color: var(--muted); }
+.practice {
+  display: inline-block; margin-top: 7px;
+  font-size: 12px; color: var(--kid);
+}
 
 .stars {
   margin-left: auto; flex: 0 0 auto;

@@ -13,6 +13,8 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.services.calc_service import CalcError
+from app.services.mistake_service import MistakeError
 from app.services.task_service import TaskStateError
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
@@ -58,6 +60,22 @@ def on_task_state_error(_: Request, exc: TaskStateError) -> JSONResponse:
     路由里不用逐条 try/except——十二条状态边各写一遍捕获，
     迟早漏一条变成 500。
     """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": str(exc), "code": exc.code},
+    )
+
+
+@app.exception_handler(MistakeError)
+def on_mistake_error(_: Request, exc: MistakeError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": str(exc), "code": exc.code},
+    )
+
+
+@app.exception_handler(CalcError)
+def on_calc_error(_: Request, exc: CalcError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": str(exc), "code": exc.code},

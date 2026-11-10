@@ -48,6 +48,16 @@ class RejectIn(BaseModel):
     comment: str = Field(min_length=1, max_length=255, description="退回原因，必填")
 
 
+class ApproveIn(BaseModel):
+    """审核通过。错题重做的任务要顺手判一次对错，才能排下一次复习。"""
+
+    redo_correct: bool | None = Field(
+        None,
+        description="仅 kind=redo 有效：true 做对了推进一轮，false 还是错回到起点。"
+                    "不传则只完成任务、不动错题节奏",
+    )
+
+
 class ShotOut(BaseModel):
     id: int
     file_id: int
@@ -90,6 +100,21 @@ class TaskBrief(BaseModel):
         return v.replace(tzinfo=timezone.utc).isoformat() if v else None
 
 
+class MistakeRef(BaseModel):
+    """错题重做任务关联的错题摘要。审核页要靠它显示原题和正确答案，
+    否则家长只看到一张照片，没法判「这次做对了没有」。"""
+
+    id: int
+    subject: str
+    point: str
+    stem: str
+    answer_own: str | None = None
+    answer_right: str | None = None
+    stage: int = 0
+    due_date: date | None = None
+
+
 class TaskDetail(TaskBrief):
     shots: list[ShotOut] = []
     reviews: list[ReviewOut] = []
+    mistake: MistakeRef | None = None

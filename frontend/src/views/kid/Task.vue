@@ -139,10 +139,16 @@ onMounted(load)
 
     <!-- 待做 -->
     <div v-if="task.status === 'todo'" class="panel">
-      <p class="tip">准备好了就开始。计时会记下你用了多久，中途随时可以交。</p>
-      <button class="primary" :disabled="busy" @click="onStart">
-        {{ busy ? '开始中…' : '开始做' }}
-      </button>
+      <template v-if="task.kind === 'calc'">
+        <p class="tip">口算题由电脑出，做完当场判分，不用拍照也不用等批。</p>
+        <RouterLink class="primary link-btn" :to="`/kid/calc/${task.id}`">开始口算</RouterLink>
+      </template>
+      <template v-else>
+        <p class="tip">准备好了就开始。计时会记下你用了多久，中途随时可以交。</p>
+        <button class="primary" :disabled="busy" @click="onStart">
+          {{ busy ? '开始中…' : '开始做' }}
+        </button>
+      </template>
     </div>
 
     <!-- 已退回 -->
@@ -155,39 +161,47 @@ onMounted(load)
 
     <!-- 进行中 -->
     <div v-if="editable" class="panel">
-      <div class="timer">
-        <span class="label">已经用了</span>
-        <strong>{{ elapsedText }}</strong>
-      </div>
+      <!-- 口算不进拍照流程：题目在屏幕上，答案由后端判 -->
+      <template v-if="task.kind === 'calc'">
+        <p class="tip">这一条是口算，点下面进做题页。做完自动判分，不用提交照片。</p>
+        <RouterLink class="primary link-btn" :to="`/kid/calc/${task.id}`">继续做口算</RouterLink>
+      </template>
 
-      <div class="shots">
-        <figure v-for="s in task.shots" :key="s.id">
-          <img :src="s.url" alt="作业照片" />
-          <button class="del" @click="removeShot(s.id)">删掉</button>
-        </figure>
-        <label class="add" :class="{ uploading }">
-          <input
-            type="file" accept="image/*" capture="environment" multiple hidden
-            @change="onPick"
-          />
-          <span>{{ uploading ? '上传中…' : '＋ 拍照' }}</span>
+      <template v-else>
+        <div class="timer">
+          <span class="label">已经用了</span>
+          <strong>{{ elapsedText }}</strong>
+        </div>
+
+        <div class="shots">
+          <figure v-for="s in task.shots" :key="s.id">
+            <img :src="s.url" alt="作业照片" />
+            <button class="del" @click="removeShot(s.id)">删掉</button>
+          </figure>
+          <label class="add" :class="{ uploading }">
+            <input
+              type="file" accept="image/*" capture="environment" multiple hidden
+              @change="onPick"
+            />
+            <span>{{ uploading ? '上传中…' : '＋ 拍照' }}</span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>说一句（没拍照的话，这里写清楚也算交了）</span>
+          <textarea
+            v-model="note" rows="3" maxlength="500"
+            placeholder="例如：第三题我重算了一遍，答案是 47"
+          ></textarea>
         </label>
-      </div>
 
-      <label class="field">
-        <span>说一句（没拍照的话，这里写清楚也算交了）</span>
-        <textarea
-          v-model="note" rows="3" maxlength="500"
-          placeholder="例如：第三题我重算了一遍，答案是 47"
-        ></textarea>
-      </label>
-
-      <div class="actions">
-        <button class="primary" :disabled="busy || uploading || !canSubmit" @click="onSubmit">
-          {{ busy ? '提交中…' : '交给爸爸妈妈' }}
-        </button>
-        <span class="hint">照片和说明，有一样就行</span>
-      </div>
+        <div class="actions">
+          <button class="primary" :disabled="busy || uploading || !canSubmit" @click="onSubmit">
+            {{ busy ? '提交中…' : '交给爸爸妈妈' }}
+          </button>
+          <span class="hint">照片和说明，有一样就行</span>
+        </div>
+      </template>
     </div>
 
     <!-- 已提交 / 已完成 -->
@@ -314,6 +328,7 @@ button { font: inherit; cursor: pointer; }
   border: none; border-radius: var(--r-sm);
 }
 .primary:disabled { background: var(--page); color: var(--hint); cursor: default; }
+.link-btn { display: inline-block; text-decoration: none; }
 .ghost {
   font-size: 12.5px; padding: 6px 14px;
   background: transparent; color: var(--muted);

@@ -12,6 +12,10 @@ M2 定稿 5 态 6 边：
     submitted --withdraw-->  doing       孩子撤回，started_at 重置避免重复计
     rejected  --restart--->  doing       重做，重新计时
 
+M3 增加一条边，只给口算用（见 complete_by_machine）：
+
+    doing     --autograde->  done        机器判分，跳过待审核
+
 `done` 没有出边：审核误点只能改库，不提供撤销接口（M2 明确不做）。
 
 并发靠「带 status 条件的 UPDATE + 检查 rowcount」，不做先查后改。
@@ -180,6 +184,32 @@ def approve(db: Session, task: Task, reviewer_id: int | None) -> Task:
             ref_id=task.id,
         )
     )
+    return _finish(db, task)
+
+
+def complete_by_machine(db: Session, task: Task, stars_earned: int, reason: str = "口算完成") -> Task:
+    """doing → done。M3 新增的边，只给口算用。
+
+    与 approve 的差别有两个，都很重要：
+    1. **跳过待审核**。口算是客观题，机器能判分，让家长一道一道点「通过」
+       是把家长的注意力浪费在机器已经做完的事上。
+    2. **不写 TaskReview**。那张表记录的是「人做的判定」，没有人的时候
+       不该造假记录，否则家长端会出现一条自己没点过的审核记录。
+
+    stars_earned 可能为 0（正确率极低时），此时不写星星流水：
+    0 星星不需要一条账，写了反而让流水里出现无意义的条目。
+    """
+    _transition(db, task, ("doing",), "done", reviewed_at=utcnow())
+    if stars_earned > 0:
+        db.add(
+            StarLedger(
+                child_id=task.child_id,
+                delta=stars_earned,
+                reason=reason,
+                ref_type="task",
+                ref_id=task.id,
+            )
+        )
     return _finish(db, task)
 
 

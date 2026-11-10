@@ -64,11 +64,23 @@ frontend/
     │   └── index.ts
     ├── views/
     │   ├── Home.vue
-    │   ├── kid/Today.vue
-    │   └── parent/Dashboard.vue
+    │   ├── Login.vue
+    │   ├── kid/Today.vue          四个分区：今日 / 补做 / 待审核 / 已完成
+    │   ├── kid/Task.vue           作业页：计时、拍照、说明、提交
+    │   ├── kid/Calc.vue           口算页：一题一屏，交卷当场判分
+    │   ├── parent/Dashboard.vue   总览 + 孩子档案
+    │   ├── parent/Tasks.vue       布置 / 编辑 / 删除
+    │   ├── parent/Review.vue      审核：通过发星、退回、错题判对错
+    │   └── parent/Mistakes.vue    错题本：录入、复习节奏、重做记录
     ├── api/
     │   ├── http.ts
+    │   ├── auth.ts
+    │   ├── tasks.ts
+    │   ├── mistakes.ts
+    │   ├── calc.ts
     │   └── system.ts
+    ├── lib/
+    │   └── time.ts                时间格式化与计时
     ├── stores/
     │   └── session.ts
     └── styles/
@@ -144,15 +156,25 @@ createApp(App).use(createPinia()).use(router).mount('#app')
 
 一个文件一页，按端分目录。
 
-| 文件 | 现状 |
+| 文件 | 职责 |
 |---|---|
-| `Home.vue` | 环境自检页，唯一有真实逻辑的页面 |
-| `kid/Today.vue` | 占位，列出 M2–M3 的施工清单 |
-| `parent/Dashboard.vue` | 占位，列出 M2–M4 的施工清单 |
+| `Home.vue` | 环境自检页。后端没起时是唯一能打开的地方 |
+| `Login.vue` | 登录，成功后按 `?redirect=` 回跳 |
+| `kid/Today.vue` | 今日 / 补做 / 待审核 / 已完成四区。分区口径在服务端 `bucket`，前端不自己算 |
+| `kid/Task.vue` | 作业页：计时、拍照、写说明、提交、撤回。口算任务在这里只显示一个入口 |
+| `kid/Calc.vue` | 口算一题一屏，回车跳下一题，交卷当场出分 |
+| `parent/Dashboard.vue` | 总览四个数（待审核 / 还没交 / 已完成 / 错题待复习）+ 孩子档案 |
+| `parent/Tasks.vue` | 布置、编辑、删除。可选题型：普通作业 / 口算 |
+| `parent/Review.vue` | 审核：看照片、通过发星、退回写原因；**错题重做任务要顺手判「做对了 / 还是错」** |
+| `parent/Mistakes.vue` | 错题本：录入、三档列表、复习进度、重做流水 |
 
 `Home.vue` 值得看的是它的三段式模板：`v-if="loading"` / `v-else-if="error"` / `v-else-if="health"`。**三个状态都要有 UI**，不能只写成功分支 —— 后端没起时页面上要有"连不上后端"的明确提示和下一步命令，而不是一片空白。
 
-`kid/Today.vue` 和 `parent/Dashboard.vue` 目前是数组驱动的清单，M2 开始逐个替换成真实内容，不是重写整个文件。
+两处刻意的页面划分：
+
+**拍照不在列表页。** `Today.vue` 只负责导航，计时和拍照全在 `Task.vue`。因为「开始」才写 `started_at`，提交按钮放在列表上，计时就没有起点。
+
+**口算不走 `Task.vue`。** 它是客观题，孩子一题一屏做、交卷当场判分，没有照片也没有待审核环节。`Today.vue` 用 `taskLink()` 按 `kind` 分流，后端用 `kind=calc` 的 `autograde` 边直接进 `done`。
 
 **放**：模板、该页专属的 `scoped` 样式、调用 api。
 

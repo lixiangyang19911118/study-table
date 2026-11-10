@@ -287,6 +287,10 @@ class Mistake(Base, TimestampMixin):
     mastered: Mapped[bool] = mapped_column(
         Boolean, default=False, comment="是否已掌握（连对 4 次置真）"
     )
+    source: Mapped[str] = mapped_column(
+        String(16), default="manual",
+        comment="来源：manual 家长录入 / calc 口算错题加入",
+    )
     file_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, comment="错题照片 file_object.id，OCR 录入时才有"
     )
@@ -350,6 +354,17 @@ class CalcRecord(Base, TimestampMixin):
     )
     seconds: Mapped[int] = mapped_column(
         Integer, default=0, comment="本轮用时（秒）"
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="doing",
+        comment="本轮状态：doing 出题未交卷 / done 已交卷并判分",
+    )
+    questions: Mapped[Optional[list[dict]]] = mapped_column(
+        JSON,
+        comment="题目与答案：[{type, stem, answer}]。答案只留库，出题接口不下发",
+    )
+    answers: Mapped[Optional[list[str | None]]] = mapped_column(
+        JSON, comment="孩子逐题作答，未填的为 null；交卷时写入",
     )
     types: Mapped[Optional[list[str]]] = mapped_column(
         JSON, comment="题型数组：add/sub/fill_addend/fill_minuend/fill_sum/"

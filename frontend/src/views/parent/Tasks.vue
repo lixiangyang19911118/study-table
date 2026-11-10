@@ -23,6 +23,8 @@ const editingId = ref<number | null>(null)
 const blank = () => ({
   subject: '语文' as Subject,
   title: '',
+  // calc 会让孩子进「一题一屏」的口算页，交卷当场判分，不走拍照提交
+  kind: 'normal' as 'normal' | 'calc',
   minutes_est: 20,
   stars: 1,
   note: '',
@@ -65,6 +67,7 @@ async function submit() {
   const body = {
     subject: form.value.subject,
     title: form.value.title.trim(),
+    kind: form.value.kind,
     minutes_est: form.value.minutes_est,
     stars: form.value.stars,
     note: form.value.note.trim() || null,
@@ -92,6 +95,7 @@ function edit(t: TaskBrief) {
   form.value = {
     subject: t.subject as Subject,
     title: t.title,
+    kind: t.kind === 'calc' ? 'calc' : 'normal',
     minutes_est: t.minutes_est,
     stars: t.stars,
     note: t.note ?? '',
@@ -165,6 +169,21 @@ onMounted(load)
       </label>
     </div>
 
+    <div class="kind-row">
+      <button
+        class="kind" :class="{ on: form.kind === 'normal' }"
+        :disabled="!!editing" @click="form.kind = 'normal'"
+      >
+        普通作业<span>拍照提交，家长审核</span>
+      </button>
+      <button
+        class="kind" :class="{ on: form.kind === 'calc' }"
+        :disabled="!!editing" @click="form.kind = 'calc'"
+      >
+        口算练习<span>电脑出题，交卷当场判分发星</span>
+      </button>
+    </div>
+
     <label class="field">
       <span>想对孩子说的话（可不填，会显示在任务页）</span>
       <textarea v-model="form.note" rows="2" maxlength="500" placeholder="例如：写完自己检查一遍"></textarea>
@@ -193,6 +212,7 @@ onMounted(load)
           <div class="line">
             <span class="subject">{{ t.subject }}</span>
             <span class="title">{{ t.title }}</span>
+            <span v-if="t.kind === 'calc'" class="chip">口算</span>
             <span class="chip">{{ STATUS_TEXT[t.status] }}</span>
             <span v-if="t.status === 'doing'" class="chip timer">
               已用 {{ fmtClock(t.spent_sec) }}
@@ -344,6 +364,20 @@ button { font: inherit; cursor: pointer; }
 .empty strong { font-size: 13.5px; font-weight: 500; }
 .empty p { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
 .link { font-size: 12.5px; display: inline-block; margin-top: 10px; }
+
+.kind-row { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+.kind {
+  flex: 1 1 200px; text-align: left; cursor: pointer;
+  font: inherit; font-size: 13px;
+  padding: 10px 14px;
+  background: var(--page); color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.kind span { font-size: 11px; color: var(--hint); }
+.kind.on { background: var(--kid-soft); color: var(--kid); border-color: #c7d8ef; }
+.kind.on span { color: var(--kid); }
+.kind:disabled { cursor: default; opacity: 0.6; }
 
 @media (max-width: 720px) {
   .form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

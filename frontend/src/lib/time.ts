@@ -42,6 +42,23 @@ export function timeOf(iso: string | null): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+/**
+ * '2026-11-12' → 明天 / 3 天后 / 逾期 2 天。
+ * 和 dayLabel 的区别：那个是往回看（这是哪天的任务），这个是往前看（什么时候该复习）。
+ */
+export function dueLabel(iso: string | null): string {
+  if (!iso) return ''
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const d = new Date(`${iso}T00:00:00`)
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000)
+  if (diff < 0) return `逾期 ${-diff} 天`
+  if (diff === 0) return '今天'
+  if (diff === 1) return '明天'
+  if (diff <= 7) return `${diff} 天后`
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`
+}
+
 /** 每秒跳一次的「现在」。组件卸载时自动清掉，否则切页面后定时器还在跑。 */
 export function useNow(interval = 1000) {
   const now = ref(Date.now())

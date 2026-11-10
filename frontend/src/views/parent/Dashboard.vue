@@ -3,27 +3,31 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { createChild, patchChild, type Child } from '../../api/auth'
+import { mistakeCounts } from '../../api/mistakes'
 import { listTasks } from '../../api/tasks'
 import { useSession } from '../../stores/session'
 
 const session = useSession()
 
-// 三个数只是给家长一个「今天要不要管」的判断，取不到不影响下面的档案编辑
+// 几个数只是给家长一个「今天要不要管」的判断，取不到不影响下面的档案编辑
 const reviewCount = ref(0)
 const openCount = ref(0)
 const doneCount = ref(0)
+const dueMistakes = ref(0)
 
 async function loadOverview() {
   if (!session.child) return
   try {
-    const [review, open, done] = await Promise.all([
+    const [review, open, done, counts] = await Promise.all([
       listTasks('review'),
       listTasks('today'),
       listTasks('done'),
+      mistakeCounts(),
     ])
     reviewCount.value = review.length
     openCount.value = open.length
     doneCount.value = done.length
+    dueMistakes.value = counts.due
   } catch {
     // 总览是锦上添花，出错就不显示数字，别把整页搞崩
   }
@@ -102,10 +106,9 @@ async function addChild() {
 const planned = [
   { name: '粘贴导入老师作业', note: '识别段落头与科目，生成待确认清单', m: 'M2 后续' },
   { name: '任务拖拽调序', note: '按预估时长控制每天总量', m: 'M2 后续' },
-  { name: '错题录入与重做记录', note: '含 OCR 结果核对页', m: 'M3' },
-  { name: '口算练习', note: '出题与判分都在服务端', m: 'M3' },
   { name: '教材资源管理', note: 'PDF 存磁盘，按年级科目分类', m: 'M4' },
-  { name: '周报', note: '实时聚合，不读快照', m: 'M4' },
+  { name: '周报与星星余额', note: '实时聚合，不读快照', m: 'M4' },
+  { name: '拍照识别录入错题', note: 'OCR 结果要能人工核对', m: 'M5' },
 ]
 </script>
 
@@ -127,6 +130,10 @@ const planned = [
     <RouterLink class="ov" to="/parent/tasks">
       <span class="num">{{ doneCount }}</span>
       <span class="lbl">今天已完成</span>
+    </RouterLink>
+    <RouterLink class="ov" to="/parent/mistakes">
+      <span class="num" :class="{ hot: dueMistakes > 0 }">{{ dueMistakes }}</span>
+      <span class="lbl">错题待复习</span>
     </RouterLink>
     <RouterLink class="ov new" to="/parent/tasks">
       <span class="plus">＋</span>

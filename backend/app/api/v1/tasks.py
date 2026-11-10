@@ -4,6 +4,7 @@
 状态判断、计时结算、流水写入全在 services/task_service.py，
 不要在路由里直接改 task.status。
 """
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,9 +16,12 @@ from app.core.clock import local_today
 from app.core.db import get_db
 from app.models import Account, FileObject, Task, TaskReview, TaskShot
 from app.schemas.task import (
-    RejectIn, ShotIn, SubmitIn, TaskBrief, TaskCreate, TaskDetail, TaskPatch,
+    ApproveIn, RejectIn, ShotIn, SubmitIn, TaskBrief, TaskCreate, TaskDetail, TaskPatch,
 )
+from app.services import mistake_service
 from app.services import task_service as svc
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["任务"])
 
@@ -65,6 +69,17 @@ def _detail(db: Session, task: Task) -> dict:
         {"id": r.id, "action": r.action, "comment": r.comment, "created_at": r.created_at}
         for r in reviews
     ]
+    # 错题重做的任务带上原题，审核页才判得出来「这次做对了没有」
+    m = mistake_service.from_task(db, task)
+    data["mistake"] = (
+        {
+            "id": m.id, "subject": m.subject, "point": m.point, "stem": m.stem,
+            "answer_own": m.answer_own, "answer_right": m.answer_right,
+            "stage": m.stage, "due_date": m.due_date,
+        }
+        if m is not None and m.deleted_at is None
+        else None
+    )
     return data
 
 
@@ -186,10 +201,33 @@ def withdraw(
 @router.post("/tasks/{task_id}/approve", response_model=TaskDetail, summary="审核通过并发星")
 def approve(
     task_id: int,
+    body: ApproveIn | None = None,
     account: Account = Depends(get_current_account),
     db: Session = Depends(get_db),
 ):
-    return _detail(db, svc.approve(db, owned_task(task_id, account, db), account.id))
+    """审核通过。
+
+    如果这是一条「错题重做」任务，body 里的 redo_correct 决定这道错题
+    下一轮什么时候再来：对了往后排，错了明天重来。
+
+    顺序上先完成再推进错题。推进失败不影响任务已完成——错题的 due_date
+    仍留在过去，第二天 00:10 的扫描会重新生成任务，属于自愈的失败。
+    反过来先推进错题、再完成任务，一旦任务被并发请求抢走，错题的节奏
+    就被白推了一轮，这才是不可逆的错。
+    """
+    task = svc.approve(db, owned_task(task_id, account, db), account.id)
+
+    if body is not None and body.redo_correct is not None:
+        if task.kind != "redo":
+            raise HTTPException(400, "只有错题重做任务（kind=redo）需要判对错")
+        m = mistake_service.from_task(db, task)
+        if m is not None:
+            try:
+                mistake_service.review(db, m, body.redo_correct)
+            except mistake_service.MistakeError as e:
+                log.warning("错题 %s 推进失败（任务 %s 已完成）：%s", m.id, task.id, e)
+
+    return _detail(db, task)
 
 
 @router.post("/tasks/{task_id}/reject", response_model=TaskDetail, summary="退回重做")

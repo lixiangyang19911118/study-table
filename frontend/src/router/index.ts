@@ -29,6 +29,12 @@ const router = createRouter({
           name: 'kid-task',
           component: () => import('../views/kid/Task.vue'),
         },
+        // 口算一题一屏。带 id 是任务模式（交卷结算发星），不带是独立练习（只记成绩）
+        {
+          path: 'calc/:id?',
+          name: 'kid-calc',
+          component: () => import('../views/kid/Calc.vue'),
+        },
       ],
     },
     {
@@ -49,6 +55,11 @@ const router = createRouter({
           path: 'review',
           name: 'parent-review',
           component: () => import('../views/parent/Review.vue'),
+        },
+        {
+          path: 'mistakes',
+          name: 'parent-mistakes',
+          component: () => import('../views/parent/Mistakes.vue'),
         },
       ],
     },

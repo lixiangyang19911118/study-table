@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import decode_token
-from app.models import Account, Child, Task
+from app.models import Account, Child, Mistake, Task
 
 
 def get_current_account(request: Request, db: Session = Depends(get_db)) -> Account:
@@ -83,3 +83,12 @@ def owned_task(task_id: int, account: Account, db: Session) -> Task:
         raise HTTPException(404, "任务不存在")
     owned_child(task.child_id, account, db)
     return task
+
+
+def owned_mistake(mistake_id: int, account: Account, db: Session) -> Mistake:
+    """取错题并校验归属。软删的同样视同不存在。"""
+    m = db.get(Mistake, mistake_id)
+    if m is None or m.deleted_at is not None:
+        raise HTTPException(404, "错题不存在")
+    owned_child(m.child_id, account, db)
+    return m

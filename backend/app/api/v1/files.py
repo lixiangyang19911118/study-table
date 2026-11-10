@@ -22,7 +22,7 @@ from app.models import Account, FileObject
 
 router = APIRouter(tags=["文件"])
 
-ALLOWED_BIZ = {"book", "shot", "avatar"}
+ALLOWED_BIZ = {"book", "shot", "avatar", "mistake"}
 MIME_BY_SUFFIX = {
     ".pdf": "application/pdf",
     ".jpg": "image/jpeg",
@@ -34,7 +34,7 @@ MIME_BY_SUFFIX = {
 
 @router.post("/files", summary="上传文件，返回 file_id")
 def upload_file(
-    biz_type: str = Form(..., description="book / shot / avatar"),
+    biz_type: str = Form(..., description="book / shot / avatar / mistake"),
     file: UploadFile = File(...),
     child_id: int | None = Form(None, description="不传则落到默认孩子；传了必须属于本账号"),
     account: Account = Depends(get_current_account),
