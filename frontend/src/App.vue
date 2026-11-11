@@ -29,6 +29,7 @@ async function signOut() {
         <span class="seg">孩子</span>
         <RouterLink to="/kid/today">任务</RouterLink>
         <RouterLink to="/kid/stars">星星</RouterLink>
+        <RouterLink to="/kid/calendar">打卡</RouterLink>
         <span class="seg">家长</span>
         <RouterLink to="/parent/dashboard">总览</RouterLink>
         <RouterLink to="/parent/tasks">布置</RouterLink>

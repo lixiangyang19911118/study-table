@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import { listTasks, type TaskBrief } from '../../api/tasks'
+import { settleCheckin } from '../../api/checkins'
 import { dayLabel, fmtClock, timeOf, useNow } from '../../lib/time'
 import { useSession } from '../../stores/session'
 
@@ -16,6 +17,10 @@ const done = ref<TaskBrief[]>([])
 const loading = ref(true)
 const err = ref('')
 
+/** 连续打卡天数，从 settle 的返回里顺带拿到，不用额外再查一次日历 */
+const streak = ref(0)
+const checkedToday = ref(false)
+
 // 进行中的任务要显示「已用 3:21」，每秒跳一次
 const now = useNow()
 
@@ -27,6 +32,14 @@ const gradeText = computed(() => {
 const todayStars = computed(() => done.value.reduce((sum, t) => sum + t.stars, 0))
 
 const openCount = computed(() => today.value.length)
+
+/** 今日页上的打卡暗示。连着来几天是孩子最在意的一个数，别让他每次翻日历才知道。 */
+const streakText = computed(() => {
+  if (!streak.value) return '打开打卡日历 →'
+  return checkedToday.value
+    ? `连续打卡 ${streak.value} 天 · 今天已记上`
+    : `连续打卡 ${streak.value} 天`
+})
 
 /** 口算进「一题一屏」的做题页，其余进拍照提交的作业页。 */
 function taskLink(t: TaskBrief) {
@@ -73,6 +86,16 @@ function elapsed(t: TaskBrief) {
 async function load() {
   loading.value = true
   err.value = ''
+
+  // 顺带结算一次打卡：家长批完最后一个任务后，孩子一打开今日页就能看到「今天记上了」，
+  // 不用等到 23:55 的定时任务。失败不阻塞任务列表，定时任务还有一次兜底。
+  settleCheckin()
+    .then((s) => {
+      streak.value = s.streak
+      checkedToday.value = s.checked_today
+    })
+    .catch(() => {})
+
   try {
     const [a, b, c, d] = await Promise.all([
       listTasks('today'),
@@ -101,6 +124,9 @@ onMounted(load)
       <p class="sub">{{ subline }}</p>
       <RouterLink v-if="session.child" class="practice" to="/kid/calc">
         想多练几道口算？自己来一轮
+      </RouterLink>
+      <RouterLink v-if="session.child" class="practice cal" to="/kid/calendar">
+        {{ streakText }}
       </RouterLink>
     </div>
     <RouterLink v-if="session.child" class="stars" to="/kid/stars">
@@ -241,6 +267,7 @@ onMounted(load)
   display: inline-block; margin-top: 7px;
   font-size: 12px; color: var(--kid);
 }
+.practice.cal { margin-top: 3px; color: var(--star); }
 
 .stars {
   margin-left: auto; flex: 0 0 auto;

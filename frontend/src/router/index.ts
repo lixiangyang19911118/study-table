@@ -40,6 +40,11 @@ const router = createRouter({
           name: 'kid-stars',
           component: () => import('../views/kid/Stars.vue'),
         },
+        {
+          path: 'calendar',
+          name: 'kid-calendar',
+          component: () => import('../views/kid/Calendar.vue'),
+        },
       ],
     },
     {

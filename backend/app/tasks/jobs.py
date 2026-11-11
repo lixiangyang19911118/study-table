@@ -12,7 +12,8 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.db import SessionLocal
-from app.models import Checkin, Mistake, Task
+from app.models import Mistake, Task
+from app.services.checkin_service import settle_child
 
 log = logging.getLogger(__name__)
 
@@ -71,27 +72,23 @@ def scan_due_mistakes() -> int:
 
 
 def settle_checkin() -> int:
-    """当天任务全部完成则记一次打卡。返回新增打卡数。"""
+    """当天任务全部完成则记一次打卡。返回新增打卡数。
+
+    判定规则与 `POST /checkins/settle` 共用 checkin_service.settle_child，
+    否则「什么算完成任务」会在两处慢慢漂。这里负责按孩子循环 + 统一提交。
+    """
     today = _today()
     added = 0
     with SessionLocal() as db:
-        rows = db.scalars(select(Task).where(Task.task_date == today, Task.deleted_at.is_(None))).all()
-        by_child: dict[int, list[Task]] = {}
-        for t in rows:
-            by_child.setdefault(t.child_id, []).append(t)
+        child_ids = db.scalars(
+            select(Task.child_id).where(
+                Task.task_date == today, Task.deleted_at.is_(None)
+            ).distinct()
+        ).all()
 
-        for child_id, tasks in by_child.items():
-            if not tasks or any(t.status != "done" for t in tasks):
-                continue
-            exists = db.scalar(
-                select(Checkin.id).where(
-                    Checkin.child_id == child_id, Checkin.check_date == today
-                )
-            )
-            if exists:
-                continue
-            db.add(Checkin(child_id=child_id, check_date=today))
-            added += 1
+        for child_id in child_ids:
+            if settle_child(db, child_id, today):
+                added += 1
         db.commit()
 
     log.info("打卡结算：新增 %s 条", added)
