@@ -25,6 +25,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import BizError
 from app.models.base import utcnow
 from app.models.entities import CalcRecord, Mistake
 
@@ -47,11 +48,9 @@ _FULLWIDTH = str.maketrans(
 )
 
 
-class CalcError(Exception):
+class CalcError(BizError):
     def __init__(self, message: str, code: str = "invalid_calc", status_code: int = 400):
-        super().__init__(message)
-        self.code = code
-        self.status_code = status_code
+        super().__init__(message, code, status_code)
 
 
 # ---------------------------------------------------------------- 出题

@@ -29,6 +29,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.clock import local_today
+from app.core.errors import BizError
 from app.models import StarLedger, Task, TaskReview, TaskShot
 from app.models.base import utcnow
 
@@ -51,13 +52,11 @@ BUCKETS = ("today", "backlog", "review", "done", "all")
 MAX_SPENT_SEC = 12 * 3600
 
 
-class TaskStateError(Exception):
+class TaskStateError(BizError):
     """状态机拒绝这次操作。路由层统一转成 409/400，带 code 便于前端分辨。"""
 
     def __init__(self, message: str, code: str = "invalid_transition", status_code: int = 409):
-        super().__init__(message)
-        self.code = code
-        self.status_code = status_code
+        super().__init__(message, code, status_code)
 
 
 def _reject(task: Task, code: str = "invalid_transition", status_code: int = 409) -> TaskStateError:

@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.clock import local_today
+from app.core.errors import BizError
 from app.models import Mistake, MistakeLog, Task
 from app.models.base import utcnow
 
@@ -37,13 +38,11 @@ CATEGORIES = ("learning", "due", "mastered")
 CAUSES = ("计算错", "看错题", "概念不清", "不会做")
 
 
-class MistakeError(Exception):
+class MistakeError(BizError):
     """错题操作被拒绝。路由层转 400/409。"""
 
     def __init__(self, message: str, code: str = "invalid_mistake", status_code: int = 400):
-        super().__init__(message)
-        self.code = code
-        self.status_code = status_code
+        super().__init__(message, code, status_code)
 
 
 def _log(db: Session, mistake_id: int, action: str, *,

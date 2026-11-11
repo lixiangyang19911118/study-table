@@ -13,9 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.services.calc_service import CalcError
-from app.services.mistake_service import MistakeError
-from app.services.task_service import TaskStateError
+from app.core.errors import BizError
 from app.tasks.scheduler import start_scheduler, stop_scheduler
 
 logging.basicConfig(
@@ -53,29 +51,14 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 
-@app.exception_handler(TaskStateError)
-def on_task_state_error(_: Request, exc: TaskStateError) -> JSONResponse:
-    """状态机拒绝的操作统一返回 409（或 400/422），并带上 code。
+@app.exception_handler(BizError)
+def on_biz_error(_: Request, exc: BizError) -> JSONResponse:
+    """业务异常统一出口：带 code，状态码由异常自带。
 
-    路由里不用逐条 try/except——十二条状态边各写一遍捕获，
-    迟早漏一条变成 500。
+    路由里不用逐条 try/except——每条状态边、每种校验各写一遍捕获，
+    迟早漏一条变成 500。子类（TaskStateError / MistakeError / CalcError）
+    只需要声明默认 code 与状态码，处理逻辑共用这一处。
     """
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": str(exc), "code": exc.code},
-    )
-
-
-@app.exception_handler(MistakeError)
-def on_mistake_error(_: Request, exc: MistakeError) -> JSONResponse:
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": str(exc), "code": exc.code},
-    )
-
-
-@app.exception_handler(CalcError)
-def on_calc_error(_: Request, exc: CalcError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": str(exc), "code": exc.code},

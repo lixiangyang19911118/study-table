@@ -103,10 +103,11 @@ onMounted(load)
         想多练几道口算？自己来一轮
       </RouterLink>
     </div>
-    <div v-if="session.child" class="stars">
+    <RouterLink v-if="session.child" class="stars" to="/kid/stars">
       <strong>{{ todayStars }}</strong>
       <span>颗星 · 今天</span>
-    </div>
+      <em class="go-stars">看我的星星 →</em>
+    </RouterLink>
   </section>
 
   <!-- 所有业务表都挂 child_id，没档案什么都写不了 -->
@@ -243,12 +244,18 @@ onMounted(load)
 
 .stars {
   margin-left: auto; flex: 0 0 auto;
-  display: flex; align-items: baseline; gap: 5px;
+  display: flex; align-items: baseline; gap: 5px; flex-wrap: wrap;
   background: var(--card); border: 1px solid var(--line);
   border-radius: var(--r-md); padding: 8px 14px;
+  max-width: 190px;
 }
+.stars:hover { border-color: var(--star); }
 .stars strong { font-size: 20px; font-weight: 500; color: var(--star); }
 .stars span { font-size: 11.5px; color: var(--hint); }
+.go-stars {
+  font-style: normal; font-size: 11px; color: var(--kid);
+  width: 100%; margin-top: 2px;
+}
 
 .group { margin-bottom: 26px; }
 .group h2 {

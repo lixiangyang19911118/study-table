@@ -146,7 +146,8 @@ CORS 只放行 `5173` 两个来源，`allow_credentials=True` 是为 Cookie 鉴�
 | `config.py` | 读 `.env`，唯一的配置来源 | `database_url`、`upload_dir` 是从字段拼出来的 property，别处不要再拼一遍；密码过 `quote_plus`，否则含 `@`、`#` 时连接串解析错位 |
 | `db.py` | engine + SessionLocal + `get_db` 依赖 | 同步 Session，刻意不用 async ORM；`pool_recycle=3600` 要小于 MySQL 的 `wait_timeout`，否则空闲久了报 `MySQL server has gone away` |
 | `security.py` | scrypt 口令散列 + JWT 签发校验 | 用标准库 `hashlib.scrypt`，不引 passlib —— 它和新版 bcrypt 长期不兼容 |
-| `clock.py` | 本地时区的「现在 / 今天」 | 库里存 UTC，但 `task_date` 记的是「哪一天」。晚上 8 点之后布置的任务若用 `date.today()` 会落到第二天 |
+| `clock.py` | 本地时区的「现在 / 今天」，以及周与日的边界换算 | 库里存 UTC，但 `task_date` 记的是「哪一天」。晚上 8 点之后布置的任务若用 `date.today()` 会落到第二天 |
+| `errors.py` | 业务异常基类 `BizError`（带 `code` 与状态码） | M4 统一了原来三个各自注册处理器的异常类。子类只声明默认 `code` 与状态码，`main.py` 一个 handler 管完；再加服务不必再写一遍 `try/except` |
 
 **不放**：业务规则。`core` 被所有层依赖，它一旦 import 上层就会立刻循环依赖。
 
@@ -162,7 +163,7 @@ CORS 只放行 `5173` 两个来源，`allow_credentials=True` 是为 Cookie 鉴�
 | 文件 | 内容 |
 |---|---|
 | `base.py` | `Base`、`TimestampMixin`、`utcnow()` |
-| `entities.py` | 15 张表，一张表一个类 |
+| `entities.py` | 16 张表，一张表一个类 |
 | `__init__.py` | 统一导出，`alembic/env.py` 靠 `from app.models import Base` 收齐 metadata |
 
 **放**：`mapped_column`、索引、唯一约束、外键、`comment=`。
@@ -181,7 +182,7 @@ CORS 只放行 `5173` 两个来源，`allow_credentials=True` 是为 Cookie 鉴�
 
 不要直接 `ALTER TABLE`。直连数据库改完，下次重建库时那个字段就没了。
 
-字段注释也写在模型里（`comment=` 参数），当前覆盖率 **15 张表 / 144 个字段，100%**。新加字段漏了 `comment=` 就会破，补回来要多写一版迁移。
+字段注释也写在模型里（`comment=` 参数），当前覆盖率 **16 张表 / 154 个字段，100%**。新加字段漏了 `comment=` 就会破，补回来要多写一版迁移。
 
 ### `app/schemas/`
 
@@ -224,13 +225,15 @@ M1 起两个文件接口都要登录，`child_id` 改为从当前账号推导。
 
 ### `app/services/`
 
-业务编排层。M2 只有 `task_service.py`，M3 加了 `mistake_service.py` 与 `calc_service.py`。三个文件各守一件事，谁的字段谁改，不交叉写对方的表。
+业务编排层。M2 只有 `task_service.py`，M3 加了 `mistake_service.py` 与 `calc_service.py`，M4 加了 `star_service.py` 与 `report_service.py`。五个文件各守一件事，谁的字段谁改，不交叉写对方的表。
 
 | 文件 | 守什么 |
 |---|---|
 | `task_service.py` | `task.status` 的所有变更。路由层不许直接赋值 |
 | `mistake_service.py` | `mistake.stage / due_date / mastered` 的所有变更 |
 | `calc_service.py` | 出题、判分、口算星星折算 |
+| `star_service.py` | 余额口径、兑换四态流转、锁 child 行 |
+| `report_service.py` | 周报聚合（纯读，不写库） |
 
 **所有 `task.status` 变更只能走 `task_service`。** 路由层直接赋值一行代码就能绕过计时结算、审核流水和星星流水，而且不会报错——出问题时表现为"这孩子星星少了一颗"，极难定位。错题的 `stage` 同理：它是复习节奏的唯一真相，被绕过一次，那道题就再也不会按时回来。
 
@@ -337,6 +340,36 @@ chain_sub    30 - 8 - 5 = ?     连减
 
 **口算错题不自动进错题本。** 一轮错 8 道就是 8 条新错题，错题本会迅速膨胀到没人看。交卷页列出来，孩子手动挑（`POST /calc/rounds/{id}/to-mistakes`）。独立练习（不带 `task_id`）不发星，否则同一套题反复练就能把星星刷通胀。
 
+#### `star_service.py`：余额与兑换
+
+余额不是字段，是 `SUM(star_ledger.delta)`。好处是每一颗星都能逐条核对，代价是两个问题必须正面处理：
+
+**问题一：查余额与插流水之间有窗口。** 孩子连点两下兑换，两次都读到 100 颗、各扣 80，余额变 −60。解法是在扣减前 `SELECT id FROM child WHERE id = ? FOR UPDATE` 锁住孩子行，把同一个孩子的星星操作串行化。锁的是一行主键，不会有间隙锁的意外；兑换本身低频，等一两毫秒远比重算账目便宜。
+
+**问题二：pending 必须占住余额。** 否则孩子能连提十笔 80 颗的申请，家长逐条批下去才发现透支。所以有了「可用余额」`balance - Σ(pending.cost)`：申请时按它挡一道，批准时**排除自己**再算一次（它自己的 cost 还挂在 pending 里，不排除会把自己算成占用，永远差一颗）。
+
+| 状态 | 触发 | 是否动账 |
+|---|---|---|
+| pending | 孩子 `POST /rewards/{id}/redeem` | 否，只占可用余额 |
+| approved | 家长批准 | **是**，写 `-cost` 流水 |
+| rejected | 家长拒绝（原因必填） | 否，释放占用 |
+| cancelled | 孩子撤回 | 否，释放占用 |
+
+四个动作都走「带 status 条件的 UPDATE + 检查 rowcount」，两台设备同时点只有一次成功，第二次拿 409。
+
+`cost` 与 `reward_name` 存快照：家长事后把「看动画片」从 20 颗改成 50 颗，已提交的申请仍按 20 颗结算；删掉奖励项时 `reward_id` 置空（`ON DELETE SET NULL`），历史账目不断。`star_ledger.reason` 是 `varchar(32)` 而奖励名最长 64，写入前必须截断——不截断会在 commit 时才报 `Data too long`，极难定位。
+
+#### `report_service.py`：周报
+
+没有周报表，每次实时聚合。**一周有两组数字，口径不同**：
+
+- `planned / completed / rate` 按 `task_date` 归周 —— 回答「这周布置的做完了吗」
+- `done_this_week` / 每日分布 / 科目分布 / 用时 按 `reviewed_at` 归周 —— 回答「这周实际干了多少」
+
+周日补做上周的题会算进后者、不算进前者。所以完成率不会超过 100%，两个数都是真的。
+
+时区是这块最容易错的地方：库里存 UTC，家长看的是本地周一到周日。必须**先按本地算出周一与周日，再换算成 UTC 去查库**，不能拿 UTC 时间去 `isocalendar()`。`core/clock.py` 里的 `week_bounds` / `day_bounds_utc` / `parse_week` 就是干这个的。
+
 ### `app/integrations/`
 
 外部依赖的适配层，目前只有 `storage.py`。
@@ -383,7 +416,7 @@ if p != self.root and self.root not in p.parents:
 
 ### `alembic/`
 
-表结构演进。`0001` 建 15 张表，`0002` 补中文注释，`0003` 给 `account` 加登录名，`0004` 给 `task` 加 `submit_note`，`0005` 给 `calc_record` 加逐题明细（`status` / `questions` / `answers`）并给 `mistake` 加 `source`。
+表结构演进。`0001` 建 15 张表，`0002` 补中文注释，`0003` 给 `account` 加登录名，`0004` 给 `task` 加 `submit_note`，`0005` 给 `calc_record` 加逐题明细（`status` / `questions` / `answers`）并给 `mistake` 加 `source`，`0006` 建 `reward_redemption`（兑换记录）。
 
 `env.py` 里三件事值得知道：
 
@@ -402,7 +435,7 @@ if p != self.root and self.root not in p.parents:
 
 ### `tests/`
 
-60 条，约 4 秒跑完。
+84 条，约 5 秒跑完。
 
 | 文件 | 内容 |
 |---|---|
@@ -411,6 +444,7 @@ if p != self.root and self.root not in p.parents:
 | `test_auth.py` | 登录成功/失败、未登录 401、跨账号 403 |
 | `test_task_flow.py` | 状态机 6 条边 + 6 条不该通过的路径 + 补做区口径 |
 | `test_mistake_calc.py` | 间隔表 1/2/4/7 与掌握边界、答错归零、扫描器幂等、口算答案不下发、判分与发星折算、错题入库 |
+| `test_star_reward.py` | 余额聚合、pending 占额、批准才扣星、重复批准 409、改价不改历史、删奖励不断账、周报两组口径 |
 
 ```bash
 .venv/bin/python -m pytest tests -q
@@ -510,7 +544,8 @@ M2 引入时只有 `task_service.py`，M3 扩到三个。判据始终是同一�
 | M1 | 登录、账号、孩子档案、JWT 进 Cookie | 完成 |
 | M2 | 任务主链路接口：布置 → 提交 → 审核 → 发星 | 完成 |
 | M3 | 错题本 + 口算出题与判分（必须放在后端） | 完成 |
-| M4 | 教材上传、周报聚合、星星余额与兑换 | 未开始 |
+| M4a | 星星余额、奖励清单、兑换（待家长确认）、周报实时聚合 | 完成 |
+| M4b | 教材 PDF 上传、分类与在线预览 | 未开始 |
 | M5 | AI 助手 SSE + 拍照识别，含超时与每日次数上限 | 未开始 |
 | M6 | 备份脚本、恢复演练 | 未开始 |
 

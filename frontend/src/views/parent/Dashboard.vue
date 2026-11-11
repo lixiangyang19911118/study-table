@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 
 import { createChild, patchChild, type Child } from '../../api/auth'
 import { mistakeCounts } from '../../api/mistakes'
+import { listRedemptions } from '../../api/rewards'
 import { listTasks } from '../../api/tasks'
 import { useSession } from '../../stores/session'
 
@@ -14,20 +15,23 @@ const reviewCount = ref(0)
 const openCount = ref(0)
 const doneCount = ref(0)
 const dueMistakes = ref(0)
+const pendingRedeem = ref(0)
 
 async function loadOverview() {
   if (!session.child) return
   try {
-    const [review, open, done, counts] = await Promise.all([
+    const [review, open, done, counts, redeem] = await Promise.all([
       listTasks('review'),
       listTasks('today'),
       listTasks('done'),
       mistakeCounts(),
+      listRedemptions('pending'),
     ])
     reviewCount.value = review.length
     openCount.value = open.length
     doneCount.value = done.length
     dueMistakes.value = counts.due
+    pendingRedeem.value = redeem.length
   } catch {
     // 总览是锦上添花，出错就不显示数字，别把整页搞崩
   }
@@ -119,6 +123,10 @@ const planned = [
   </section>
 
   <div v-if="session.child" class="overview">
+    <RouterLink v-if="pendingRedeem > 0" class="ov" to="/parent/rewards">
+      <span class="num hot">{{ pendingRedeem }}</span>
+      <span class="lbl">兑换等你点头</span>
+    </RouterLink>
     <RouterLink class="ov" to="/parent/review">
       <span class="num" :class="{ hot: reviewCount > 0 }">{{ reviewCount }}</span>
       <span class="lbl">待你审核</span>

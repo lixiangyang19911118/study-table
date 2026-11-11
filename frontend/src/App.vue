@@ -23,15 +23,19 @@ async function signOut() {
       <div class="brand">
         <span class="dot"></span>
         <strong>学习工作台</strong>
-        <span class="ver">M3</span>
+        <span class="ver">M4</span>
       </div>
       <nav class="nav">
-        <RouterLink to="/kid/today">孩子端</RouterLink>
-        <RouterLink to="/parent/dashboard">家长总览</RouterLink>
+        <span class="seg">孩子</span>
+        <RouterLink to="/kid/today">任务</RouterLink>
+        <RouterLink to="/kid/stars">星星</RouterLink>
+        <span class="seg">家长</span>
+        <RouterLink to="/parent/dashboard">总览</RouterLink>
         <RouterLink to="/parent/tasks">布置</RouterLink>
         <RouterLink to="/parent/review">审核</RouterLink>
-        <RouterLink to="/parent/mistakes">错题本</RouterLink>
-        <RouterLink to="/">自检</RouterLink>
+        <RouterLink to="/parent/mistakes">错题</RouterLink>
+        <RouterLink to="/parent/rewards">奖励</RouterLink>
+        <RouterLink to="/parent/report">周报</RouterLink>
       </nav>
       <div v-if="session.account" class="who">
         <span class="name">{{ session.account.nickname }}</span>
@@ -67,13 +71,19 @@ async function signOut() {
   border: 1px solid var(--line); border-radius: 5px;
   padding: 1px 6px;
 }
-.nav { display: flex; gap: 4px; margin-left: auto; }
+.nav { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 .nav a {
-  font-size: 13px; color: var(--ink-2);
-  padding: 6px 12px; border-radius: var(--r-sm);
+  font-size: 12.5px; color: var(--ink-2);
+  padding: 6px 9px; border-radius: var(--r-sm);
 }
 .nav a:hover { background: var(--page); }
 .nav a.router-link-active { color: var(--kid); background: var(--kid-soft); }
+/* 导航分「孩子 / 家长」两组：两套界面共用一套登录态，靠分组让人一眼知道自己站在哪边 */
+.seg {
+  font-size: 10.5px; color: var(--hint); letter-spacing: 0.5px;
+  padding: 0 3px 0 10px;
+}
+.seg:first-child { padding-left: 0; }
 
 .who { display: flex; align-items: center; gap: 10px; }
 .who .name { font-size: 12.5px; color: var(--muted); }

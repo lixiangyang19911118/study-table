@@ -35,6 +35,11 @@ const router = createRouter({
           name: 'kid-calc',
           component: () => import('../views/kid/Calc.vue'),
         },
+        {
+          path: 'stars',
+          name: 'kid-stars',
+          component: () => import('../views/kid/Stars.vue'),
+        },
       ],
     },
     {
@@ -60,6 +65,16 @@ const router = createRouter({
           path: 'mistakes',
           name: 'parent-mistakes',
           component: () => import('../views/parent/Mistakes.vue'),
+        },
+        {
+          path: 'rewards',
+          name: 'parent-rewards',
+          component: () => import('../views/parent/Rewards.vue'),
+        },
+        {
+          path: 'report',
+          name: 'parent-report',
+          component: () => import('../views/parent/Report.vue'),
         },
       ],
     },

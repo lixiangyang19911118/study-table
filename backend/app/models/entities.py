@@ -1,10 +1,11 @@
-"""15 张表，对应技术方案 v1.1 第 05 章。
+"""16 张表，对应技术方案 v1.1 第 05 章。
 
 几条贯穿全表的约定：
 - 所有业务表带 child_id，第一版只用得到一个孩子，但模型先留位置。
 - 文件只存 file_id，路径只出现在 file_object.rel_path 一处。
 - 星星不存余额，只存 star_ledger 流水，余额用 SUM 聚合。
 - 周报不存快照，实时 GROUP BY。
+- 兑换不直接扣星，先落 reward_redemption，家长批准时才写负向流水。
 - 时间存 UTC naive；task_date 这类「哪一天」的字段用 DATE，不带时区。
 
 所有表与字段都带 comment，MySQL 客户端里直接看得到语义，
@@ -487,6 +488,50 @@ class Reward(Base, TimestampMixin):
     )
     status: Mapped[str] = mapped_column(
         String(16), default="on", comment="状态：on 可兑换 / off 已下架"
+    )
+
+
+class RewardRedemption(Base, TimestampMixin):
+    """兑换申请。孩子提，家长批，批准那一刻才扣星。
+
+    账目不能跟着奖励定义走，所以 cost 与 reward_name 都存快照：
+    家长事后把「看动画片」从 20 星改成 50 星，历史记录不能跟着变。
+    reward_id 用 SET NULL 而非 CASCADE —— 删掉奖励项不该抹掉已发生的兑换。
+    """
+
+    __tablename__ = "reward_redemption"
+    __table_args__ = (
+        Index("ix_redeem_status", "child_id", "status"),
+        Index("ix_redeem_time", "child_id", "created_at"),
+        {"comment": "兑换申请：pending 待家长确认，批准时才写负向星星流水"},
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True, comment="主键"
+    )
+    child_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("child.id", ondelete="CASCADE"),
+        comment="归属孩子",
+    )
+    reward_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("reward.id", ondelete="SET NULL"),
+        comment="奖励项；奖励被删后置空，历史记录仍保留",
+    )
+    reward_name: Mapped[str] = mapped_column(
+        String(64), comment="奖励名称快照，防止改名后历史记录串味"
+    )
+    cost: Mapped[int] = mapped_column(
+        Integer, comment="申请时的星星价快照，防止家长改价影响历史账目"
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending",
+        comment="状态：pending 待确认 / approved 已批准 / rejected 已拒绝 / cancelled 已撤回",
+    )
+    note: Mapped[Optional[str]] = mapped_column(
+        String(255), comment="家长留言或拒绝原因"
+    )
+    decided_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, comment="家长处理时间；pending 时为空"
     )
 
 

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import decode_token
-from app.models import Account, Child, Mistake, Task
+from app.models import Account, Child, Mistake, Reward, RewardRedemption, Task
 
 
 def get_current_account(request: Request, db: Session = Depends(get_db)) -> Account:
@@ -92,3 +92,21 @@ def owned_mistake(mistake_id: int, account: Account, db: Session) -> Mistake:
         raise HTTPException(404, "错题不存在")
     owned_child(m.child_id, account, db)
     return m
+
+
+def owned_reward(reward_id: int, account: Account, db: Session) -> Reward:
+    """取奖励项并校验归属。"""
+    r = db.get(Reward, reward_id)
+    if r is None:
+        raise HTTPException(404, "奖励不存在")
+    owned_child(r.child_id, account, db)
+    return r
+
+
+def owned_redemption(redemption_id: int, account: Account, db: Session) -> RewardRedemption:
+    """取兑换记录并校验归属。兑换记录不软删，四种状态都读得到。"""
+    row = db.get(RewardRedemption, redemption_id)
+    if row is None:
+        raise HTTPException(404, "兑换记录不存在")
+    owned_child(row.child_id, account, db)
+    return row
