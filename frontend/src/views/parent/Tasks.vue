@@ -23,11 +23,13 @@ const editingId = ref<number | null>(null)
 const blank = () => ({
   subject: '语文' as Subject,
   title: '',
-  // calc 会让孩子进「一题一屏」的口算页，交卷当场判分，不走拍照提交
-  kind: 'normal' as 'normal' | 'calc',
+  // calc 进「一题一屏」的口算页，dictation 进 TTS 听写页，其余走拍照提交
+  kind: 'normal' as 'normal' | 'calc' | 'dictation',
   minutes_est: 20,
   stars: 1,
   note: '',
+  // 词表用多行文本编辑，提交时按行切开。换行是家长最自然的输入方式
+  wordsText: '',
 })
 const form = ref(blank())
 
@@ -35,6 +37,11 @@ const editing = computed(() => {
   const id = editingId.value
   return id === null ? null : open.value.find((t) => t.id === id) ?? null
 })
+
+/** 词数提示。前端只数着提示，真正的清洗（去重、截断）由服务端做 */
+const wordCount = computed(
+  () => form.value.wordsText.split('\n').filter((w) => w.trim()).length,
+)
 
 const STATUS_TEXT: Record<string, string> = {
   todo: '待做',
@@ -71,6 +78,10 @@ async function submit() {
     minutes_est: form.value.minutes_est,
     stars: form.value.stars,
     note: form.value.note.trim() || null,
+    // 按行切；空行和重复词交给服务端洗，前端不重复实现一遍规则
+    words: form.value.kind === 'dictation'
+      ? form.value.wordsText.split('\n')
+      : null,
   }
   try {
     if (editingId.value !== null) {
@@ -95,10 +106,11 @@ function edit(t: TaskBrief) {
   form.value = {
     subject: t.subject as Subject,
     title: t.title,
-    kind: t.kind === 'calc' ? 'calc' : 'normal',
+    kind: t.kind === 'calc' ? 'calc' : t.kind === 'dictation' ? 'dictation' : 'normal',
     minutes_est: t.minutes_est,
     stars: t.stars,
     note: t.note ?? '',
+    wordsText: (t.words ?? []).join('\n'),
   }
   msg.value = ''
   err.value = ''
@@ -182,7 +194,26 @@ onMounted(load)
       >
         口算练习<span>电脑出题，交卷当场判分发星</span>
       </button>
+      <button
+        class="kind" :class="{ on: form.kind === 'dictation' }"
+        :disabled="!!editing" @click="form.kind = 'dictation'"
+      >
+        听写<span>电脑念词，孩子在本子上写</span>
+      </button>
     </div>
+
+    <label v-if="form.kind === 'dictation'" class="field">
+      <span>
+        听写词表（一行一个，电脑会挨个念出来；空行和重复的词会自动去掉）
+      </span>
+      <textarea
+        v-model="form.wordsText" rows="6" maxlength="2000"
+        placeholder="苹果&#10;香蕉&#10;橘子"
+      ></textarea>
+      <em class="wcount">
+        共 {{ wordCount }} 个词<template v-if="wordCount > 50">，超过 50 个只会用前 50 个</template>
+      </em>
+    </label>
 
     <label class="field">
       <span>想对孩子说的话（可不填，会显示在任务页）</span>
@@ -213,6 +244,9 @@ onMounted(load)
             <span class="subject">{{ t.subject }}</span>
             <span class="title">{{ t.title }}</span>
             <span v-if="t.kind === 'calc'" class="chip">口算</span>
+            <span v-else-if="t.kind === 'dictation'" class="chip">
+              听写 {{ t.words?.length ?? 0 }} 词
+            </span>
             <span class="chip">{{ STATUS_TEXT[t.status] }}</span>
             <span v-if="t.status === 'doing'" class="chip timer">
               已用 {{ fmtClock(t.spent_sec) }}
@@ -288,6 +322,10 @@ h1 { font-size: 21px; font-weight: 500; margin-bottom: 6px; }
 .field { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; }
 .field span { font-size: 11.5px; color: var(--hint); }
 .field textarea { resize: vertical; line-height: 1.6; }
+.wcount {
+  font-style: normal; font-size: 11px; color: var(--hint);
+  font-variant-numeric: tabular-nums;
+}
 
 .actions { display: flex; align-items: center; gap: 12px; margin-top: 15px; flex-wrap: wrap; }
 button { font: inherit; cursor: pointer; }

@@ -51,6 +51,35 @@ BUCKETS = ("today", "backlog", "review", "done", "all")
 # 不设上限会让「今日用时」彻底失去参考价值。
 MAX_SPENT_SEC = 12 * 3600
 
+# 听写词表上限。一节课能听写的量大概 20–30 个词，50 是给「整单元生字」留的余量；
+# 单条 32 字符够覆盖英语短语，再长就不是听写而是背段落了。
+MAX_WORDS = 50
+MAX_WORD_LEN = 32
+
+
+def normalize_words(raw: list[str] | None) -> list[str] | None:
+    """洗一遍词表：去首尾空白、丢空行、去重（保序）、截断超长词。
+
+    `None` 和 `[]` 必须分开：前者是「这不是听写任务」，后者是「听写但没填词」。
+    只有后者该在路由层被拒——很多普通任务根本没有词表。
+    """
+    if raw is None:
+        return None
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw:
+        word = (item or "").strip()
+        if not word:
+            continue
+        word = word[:MAX_WORD_LEN]
+        if word in seen:
+            continue
+        seen.add(word)
+        out.append(word)
+        if len(out) >= MAX_WORDS:
+            break
+    return out
+
 
 class TaskStateError(BizError):
     """状态机拒绝这次操作。路由层统一转成 409/400，带 code 便于前端分辨。"""

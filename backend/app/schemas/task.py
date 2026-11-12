@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_serializer
 
 Subject = Literal["语文", "数学", "英语", "体育", "其他"]
-Kind = Literal["normal", "redo", "calc"]
+Kind = Literal["normal", "redo", "calc", "dictation"]
 
 
 class TaskCreate(BaseModel):
@@ -21,6 +21,11 @@ class TaskCreate(BaseModel):
     stars: int = Field(1, ge=1, le=10, description="完成后可得的星星数")
     task_date: date | None = Field(None, description="不传则算今天（本地时区）")
     note: str | None = Field(None, max_length=500, description="家长留言")
+    words: list[str] | None = Field(
+        None,
+        description="听写词表，一行一个词。kind=dictation 时必填，"
+                    "服务端会去空行、去重并限制条数与单条长度",
+    )
 
 
 class TaskPatch(BaseModel):
@@ -32,6 +37,7 @@ class TaskPatch(BaseModel):
     stars: int | None = Field(None, ge=1, le=10)
     task_date: date | None = None
     note: str | None = Field(None, max_length=500)
+    words: list[str] | None = Field(None, description="听写词表，传空数组等于清空")
 
 
 class ShotIn(BaseModel):
@@ -90,6 +96,7 @@ class TaskBrief(BaseModel):
     spent_sec: int
     note: str | None = None
     submit_note: str | None = None
+    words: list[str] | None = Field(None, description="听写词表，kind=dictation 才有")
     started_at: datetime | None = None
     submitted_at: datetime | None = None
     reviewed_at: datetime | None = None

@@ -143,6 +143,14 @@ onMounted(load)
         <p class="tip">口算题由电脑出，做完当场判分，不用拍照也不用等批。</p>
         <RouterLink class="primary link-btn" :to="`/kid/calc/${task.id}`">开始口算</RouterLink>
       </template>
+      <template v-else-if="task.kind === 'dictation'">
+        <p class="tip">
+          点下面进听写页，电脑会一个一个念出来，你在本子上写。写完回来拍照交给爸爸妈妈。
+        </p>
+        <RouterLink class="primary link-btn" :to="`/kid/dictation/${task.id}`">
+          开始听写（{{ task.words?.length ?? 0 }} 个词）
+        </RouterLink>
+      </template>
       <template v-else>
         <p class="tip">准备好了就开始。计时会记下你用了多久，中途随时可以交。</p>
         <button class="primary" :disabled="busy" @click="onStart">
@@ -168,6 +176,13 @@ onMounted(load)
       </template>
 
       <template v-else>
+        <div v-if="task.kind === 'dictation'" class="dict-bar">
+          <span>共 {{ task.words?.length ?? 0 }} 个词，没听清随时回去再听</span>
+          <RouterLink class="ghost link-btn" :to="`/kid/dictation/${task.id}`">
+            继续听写
+          </RouterLink>
+        </div>
+
         <div class="timer">
           <span class="label">已经用了</span>
           <strong>{{ elapsedText }}</strong>
@@ -272,6 +287,15 @@ h1 { font-size: 20px; font-weight: 500; margin-bottom: 5px; }
 }
 .panel.passed { border-color: #d5e8dc; background: #fbfefc; }
 .tip { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+
+/* 听写任务的回头路：孩子写到一半想重听可以直接跳回去，不用退到列表 */
+.dict-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 9px 13px; margin-bottom: 14px;
+  background: var(--kid-soft); border-radius: var(--r-sm);
+}
+.dict-bar span { font-size: 12px; color: #3a5f96; flex: 1; min-width: 140px; }
+.dict-bar .ghost { background: var(--card); }
 
 .timer {
   display: flex; align-items: baseline; gap: 9px;

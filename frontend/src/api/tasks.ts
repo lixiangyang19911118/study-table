@@ -52,6 +52,8 @@ export interface TaskBrief {
   spent_sec: number
   note: string | null
   submit_note: string | null
+  /** 听写词表，只有 kind=dictation 才有；其他任务为 null */
+  words: string[] | null
   started_at: string | null
   submitted_at: string | null
   reviewed_at: string | null
@@ -67,12 +69,14 @@ export interface TaskDetail extends TaskBrief {
 export interface TaskInput {
   subject?: Subject
   title: string
-  /** calc 任务会走口算页而不是拍照页 */
-  kind?: 'normal' | 'calc'
+  /** calc 走口算页，dictation 走听写页，normal 走拍照页 */
+  kind?: 'normal' | 'calc' | 'dictation'
   minutes_est?: number
   stars?: number
   task_date?: string
   note?: string | null
+  /** 听写词表。服务端会去空行、去重；kind=dictation 时至少要有一个词 */
+  words?: string[] | null
 }
 
 /**

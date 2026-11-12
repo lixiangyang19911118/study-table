@@ -29,6 +29,12 @@ const router = createRouter({
           name: 'kid-task',
           component: () => import('../views/kid/Task.vue'),
         },
+        // 听写：电脑念词、孩子在本子上写。不负责提交，写完回任务页拍照
+        {
+          path: 'dictation/:id',
+          name: 'kid-dictation',
+          component: () => import('../views/kid/Dictation.vue'),
+        },
         // 口算一题一屏。带 id 是任务模式（交卷结算发星），不带是独立练习（只记成绩）
         {
           path: 'calc/:id?',

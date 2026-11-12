@@ -40,6 +40,7 @@ def _brief(task: Task, shot_count: int) -> dict:
         "spent_sec": task.spent_sec,
         "note": task.note,
         "submit_note": task.submit_note,
+        "words": task.words,
         "started_at": task.started_at,
         "submitted_at": task.submitted_at,
         "reviewed_at": task.reviewed_at,
@@ -96,6 +97,12 @@ def create(
         owned_child(body.child_id, account, db) if body.child_id
         else default_child(account, db)
     )
+    # 词表只对听写有意义。其他类型即使传了也不存，避免库里留下一堆
+    # 永远读不到的数据，将来做统计时还得挨个判断 kind
+    words = svc.normalize_words(body.words) if body.kind == "dictation" else None
+    if body.kind == "dictation" and not words:
+        raise HTTPException(400, "听写任务要先填词表，至少要有一个词")
+
     task = Task(
         child_id=child.id,
         subject=body.subject,
@@ -104,6 +111,7 @@ def create(
         minutes_est=body.minutes_est,
         stars=body.stars,
         note=body.note,
+        words=words,
         task_date=body.task_date or local_today(),
     )
     db.add(task)
@@ -144,7 +152,12 @@ def update(
     db: Session = Depends(get_db),
 ):
     task = owned_task(task_id, account, db)
-    svc.update_fields(db, task, body.model_dump(exclude_unset=True, exclude_none=True))
+    values = body.model_dump(exclude_unset=True, exclude_none=True)
+    if "words" in values:
+        values["words"] = svc.normalize_words(values["words"])
+        if task.kind == "dictation" and not values["words"]:
+            raise HTTPException(400, "听写任务的词表不能改成空的")
+    svc.update_fields(db, task, values)
     return _detail(db, task)
 
 

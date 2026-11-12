@@ -146,7 +146,7 @@ class Task(Base, TimestampMixin):
     )
     kind: Mapped[str] = mapped_column(
         String(16), default="normal",
-        comment="任务类型：normal 普通 / redo 错题重做 / calc 口算",
+        comment="任务类型：normal 普通 / redo 错题重做 / calc 口算 / dictation 听写",
     )
     minutes_est: Mapped[int] = mapped_column(
         Integer, default=20, comment="预估时长（分钟），用于总量控制"
@@ -174,6 +174,11 @@ class Task(Base, TimestampMixin):
     )
     note: Mapped[Optional[str]] = mapped_column(
         Text, comment="备注：家长留言或孩子写的说明"
+    )
+    words: Mapped[Optional[list[str]]] = mapped_column(
+        JSON,
+        comment="听写词表，一行一个词；kind=dictation 时使用，其他类型为空。"
+                "刻意不做独立词表表：单用户一天一两个词表，先挂在任务上跑通",
     )
     submit_note: Mapped[Optional[str]] = mapped_column(
         Text,
